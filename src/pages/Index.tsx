@@ -1,99 +1,132 @@
 import { useState } from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { ChatArea } from '@/components/chat/ChatArea';
-import { SettingsModal } from '@/components/modals/SettingsModal';
-import { LicenseModal } from '@/components/modals/LicenseModal';
-import { useChat } from '@/hooks/useChat';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { AppSettings, LicenseInfo } from '@/types/chat';
 import { Helmet } from 'react-helmet-async';
-
-const defaultSettings: AppSettings = {
-  appName: '0x.AI',
-  theme: 'cyber',
-  apiKey: '',
-  apiProvider: 'openai',
-  model: 'gpt-4',
-};
-
-const defaultLicense: LicenseInfo = {
-  text: '',
-  version: '1.0.0',
-  lastUpdated: new Date(),
-};
+import { MainSidebar } from '@/components/layout/MainSidebar';
+import { HomeSection } from '@/components/sections/HomeSection';
+import { ConsoleSection } from '@/components/sections/ConsoleSection';
+import { APISection } from '@/components/sections/APISection';
+import { ModificationSection } from '@/components/sections/ModificationSection';
+import { LicenseSection } from '@/components/sections/LicenseSection';
+import { SettingsSection } from '@/components/sections/SettingsSection';
+import { LogsSection } from '@/components/sections/LogsSection';
+import { AboutSection } from '@/components/sections/AboutSection';
+import { useAppState } from '@/hooks/useAppState';
 
 const Index = () => {
   const {
+    settings,
+    license,
+    uploadedFiles,
     sessions,
+    logs,
     currentSession,
-    currentSessionId,
+    activeSection,
+    isAuthenticated,
     isLoading,
+    setSettings,
+    setLicense,
+    setActiveSection,
     createSession,
-    setCurrentSessionId,
-    deleteSession,
-    clearAllSessions,
+    addFile,
+    removeFile,
+    addLog,
+    clearLogs,
+    authenticate,
+    logout,
     sendMessage,
-  } = useChat();
+  } = useAppState();
 
-  const [settings, setSettings] = useLocalStorage<AppSettings>('0xai-settings', defaultSettings);
-  const [license, setLicense] = useLocalStorage<LicenseInfo>('0xai-license', defaultLicense);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isLicenseOpen, setIsLicenseOpen] = useState(false);
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
 
-  const handleNewChat = () => {
-    createSession();
+  const handleToggleInternet = () => {
+    setSettings(prev => {
+      const newState = { ...prev, internetEnabled: !prev.internetEnabled };
+      addLog(`Internet access ${newState.internetEnabled ? 'enabled' : 'disabled'}`);
+      return newState;
+    });
   };
 
-  const handleSendMessage = (message: string) => {
-    if (!currentSessionId) {
-      createSession();
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'home':
+        return (
+          <HomeSection
+            appName={settings.appName}
+            internetEnabled={settings.internetEnabled}
+            onToggleInternet={handleToggleInternet}
+            onNavigate={setActiveSection}
+            uploadedFilesCount={uploadedFiles.length}
+          />
+        );
+      case 'console':
+        return (
+          <ConsoleSection
+            session={currentSession}
+            isLoading={isLoading}
+            onSendMessage={sendMessage}
+            internetEnabled={settings.internetEnabled}
+            onToggleInternet={handleToggleInternet}
+            uploadedFiles={uploadedFiles}
+            onOpenFileManager={() => setActiveSection('settings')}
+          />
+        );
+      case 'api':
+        return (
+          <APISection
+            settings={settings}
+            onUpdateSettings={setSettings}
+          />
+        );
+      case 'modification':
+        return (
+          <ModificationSection
+            isAuthenticated={isAuthenticated}
+            onAuthenticate={authenticate}
+            onLogout={logout}
+            settings={settings}
+            license={license}
+            onUpdateSettings={setSettings}
+            onUpdateLicense={setLicense}
+          />
+        );
+      case 'license':
+        return <LicenseSection license={license} />;
+      case 'settings':
+        return (
+          <SettingsSection
+            settings={settings}
+            uploadedFiles={uploadedFiles}
+            onAddFile={addFile}
+            onRemoveFile={removeFile}
+            onUpdateSettings={setSettings}
+          />
+        );
+      case 'logs':
+        return <LogsSection logs={logs} onClearLogs={clearLogs} />;
+      case 'about':
+        return <AboutSection appName={settings.appName} />;
+      default:
+        return null;
     }
-    sendMessage(message, settings.apiKey);
   };
 
   return (
     <>
       <Helmet>
-        <title>{settings.appName} - Cybernetic AI Assistant</title>
-        <meta name="description" content="0x.AI is your advanced cybernetic AI assistant. Experience the future of AI interaction with our sleek, powerful interface." />
-        <meta name="keywords" content="AI, artificial intelligence, chatbot, assistant, cyberpunk, 0x.AI" />
+        <title>{settings.appName} - Cybersecurity AI Platform</title>
+        <meta name="description" content="AI-driven cybersecurity testing and simulation platform for controlled lab environments." />
       </Helmet>
 
       <div className="flex h-screen bg-background overflow-hidden">
-        <Sidebar
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          onSelectSession={setCurrentSessionId}
-          onNewChat={handleNewChat}
-          onDeleteSession={deleteSession}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenLicense={() => setIsLicenseOpen(true)}
+        <MainSidebar
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+          appName={settings.appName}
+          isAuthenticated={isAuthenticated}
         />
 
-        <main className="flex-1 flex flex-col overflow-hidden md:ml-0 ml-0">
-          <ChatArea
-            session={currentSession}
-            isLoading={isLoading}
-            onSendMessage={handleSendMessage}
-          />
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {renderSection()}
         </main>
-
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          settings={settings}
-          onSaveSettings={setSettings}
-          sessions={sessions}
-          onClearSessions={clearAllSessions}
-        />
-
-        <LicenseModal
-          isOpen={isLicenseOpen}
-          onClose={() => setIsLicenseOpen(false)}
-          license={license}
-          onSaveLicense={setLicense}
-          isAdmin={true}
-        />
       </div>
     </>
   );
