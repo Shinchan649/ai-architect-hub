@@ -340,11 +340,11 @@ const getStrengthBgColor = (level: PasswordStrengthResult['level']): string => {
  * @param key - The encryption key (derived from password)
  * @returns Promise<string> - Encrypted data as base64 string
  */
-const encryptSettingsData = async (data: string, key: string): Promise<string> => {
+const encryptSettingsData = async (data: string, _key: string): Promise<string> => {
   try {
-    const result = await encryptSensitiveString(data, key);
-    if (result.success && result.encrypted) {
-      return result.encrypted;
+    const result = await encryptSensitiveString(data);
+    if (result) {
+      return result;
     }
     throw new Error('Encryption failed');
   } catch (error) {
@@ -360,11 +360,11 @@ const encryptSettingsData = async (data: string, key: string): Promise<string> =
  * @param key - The decryption key
  * @returns Promise<string> - Decrypted plaintext
  */
-const decryptSettingsData = async (encryptedData: string, key: string): Promise<string> => {
+const decryptSettingsData = async (encryptedData: string, _key: string): Promise<string> => {
   try {
-    const result = await decryptSensitiveString(encryptedData, key);
-    if (result.success && result.decrypted) {
-      return result.decrypted;
+    const result = await decryptSensitiveString(encryptedData);
+    if (result) {
+      return result;
     }
     throw new Error('Decryption failed');
   } catch (error) {
@@ -391,8 +391,8 @@ const generateSessionToken = async (): Promise<string> => {
 const logSecurityAuditEvent = async (event: Omit<SecurityAuditEvent, 'eventId' | 'timestamp'>): Promise<void> => {
   try {
     await Security.audit.logEvent({
-      type: event.eventType === 'login' ? 'auth_success' : 
-            event.eventType === 'failed_login' ? 'auth_failure' :
+      type: event.eventType === 'login' ? 'authentication_success' : 
+            event.eventType === 'failed_login' ? 'authentication_failure' :
             event.eventType === 'lockout' ? 'suspicious_activity' : 'data_access',
       severity: event.success ? 'low' : 'medium',
       description: `Modification section: ${event.eventType}`,
@@ -629,18 +629,18 @@ export function ModificationSection({
           return;
         }
 
-        // Hash and store the password
-        const hashResult = await hashPassword(password);
-        if (!hashResult.success) {
-          setError('Failed to secure password. Please try again.');
-          setIsProcessing(false);
-          return;
-        }
+      // Hash and store the password
+      const hashResult = await hashPassword(password);
+      if (!hashResult.hash) {
+        setError('Failed to secure password. Please try again.');
+        setIsProcessing(false);
+        return;
+      }
 
-        // Store encrypted credentials
-        const credentials: EncryptedCredentials = {
-          passwordHash: hashResult.hash || '',
-          salt: hashResult.salt || '',
+      // Store encrypted credentials
+      const credentials: EncryptedCredentials = {
+        passwordHash: hashResult.hash,
+        salt: hashResult.salt,
           encryptedRecoveryEmail: '',
           lastPasswordChange: new Date().toISOString(),
           failedAttempts: 0,
@@ -831,8 +831,8 @@ export function ModificationSection({
 
       // Verify current password if set
       if (settings.modificationPassword) {
-        const verifyResult = await verifyPassword(currentPassword, settings.modificationPassword);
-        if (!verifyResult.isValid) {
+        const isValid = await verifyPassword(currentPassword, settings.modificationPassword as unknown as import('@/lib/security').PasswordHashResult);
+        if (!isValid) {
           setError('Current password is incorrect');
           setIsProcessing(false);
           setEncryptionStatus('error');
@@ -867,7 +867,7 @@ export function ModificationSection({
 
       // Hash new password
       const hashResult = await hashPassword(newPassword);
-      if (!hashResult.success) {
+      if (!hashResult.hash) {
         setError('Failed to secure new password');
         setIsProcessing(false);
         setEncryptionStatus('error');
@@ -1001,8 +1001,7 @@ export function ModificationSection({
       const sanitizedLicense = sanitizeHTML(licenseText);
 
       // Generate integrity hash
-      const hashResult = await computeSHA256Hash(sanitizedLicense);
-      const integrityHash = hashResult.success ? hashResult.hash : '';
+      const integrityHash = await computeSHA256Hash(sanitizedLicense);
 
       // Update license with integrity metadata
       onUpdateLicense({ 
@@ -1451,7 +1450,8 @@ export function ModificationSection({
    * Renders the appropriate sub-section content based on current state
    */
   const renderSubSection = (): JSX.Element | null => {
-    switch (subSection) {
+    const currentSection: SubSection = subSection;
+    switch (currentSection) {
       // App Name Change Section
       case 'name':
         return (
@@ -1874,11 +1874,14 @@ export function ModificationSection({
   // MAIN RENDER
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Use type assertion to prevent control flow narrowing
+  const isMenuView = (subSection as string) === 'menu';
+
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       <div className="max-w-md mx-auto w-full cyber-card rounded-xl p-6">
         {/* Back Button */}
-        {subSection !== 'menu' && (
+        {!isMenuView && (
           <Button
             variant="ghost"
             size="sm"
