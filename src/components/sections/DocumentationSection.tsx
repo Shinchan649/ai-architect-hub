@@ -151,6 +151,780 @@ interface ExportConfig {
 }
 
 /**
+ * Source code file structure for full export
+ */
+interface SourceFile {
+  path: string;
+  content: string;
+  language: string;
+}
+
+/**
+ * Complete source code registry for PDF export
+ */
+const SOURCE_CODE_FILES: SourceFile[] = [
+  {
+    path: 'src/App.tsx',
+    language: 'tsx',
+    content: `import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
+import Index from "./pages/Index";
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <HelmetProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </HelmetProvider>
+);
+
+export default App;`
+  },
+  {
+    path: 'src/main.tsx',
+    language: 'tsx',
+    content: `import { createRoot } from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+
+createRoot(document.getElementById("root")!).render(<App />);`
+  },
+  {
+    path: 'src/types/app.ts',
+    language: 'typescript',
+    content: `// Application Types
+export interface ExternalAPI {
+  id: string;
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  isActive: boolean;
+}
+
+export interface AppSettings {
+  appName: string;
+  internetEnabled: boolean;
+  modificationPassword: string;
+  recoveryEmail: string;
+  internalAPIKey: string;
+  externalAPIs: ExternalAPI[];
+  activeAPIId: string | null;
+}
+
+export interface LicenseInfo {
+  licenseCode: string;
+  activatedAt: string | null;
+  expiresAt: string | null;
+  isValid: boolean;
+  type: 'free' | 'pro' | 'enterprise';
+}`
+  },
+  {
+    path: 'src/types/chat.ts',
+    language: 'typescript',
+    content: `// Chat Types
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: Date;
+  updatedAt: Date;
+}`
+  },
+  {
+    path: 'src/lib/utils.ts',
+    language: 'typescript',
+    content: `import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}`
+  },
+  {
+    path: 'src/hooks/useLocalStorage.ts',
+    language: 'typescript',
+    content: `import { useState, useEffect } from 'react';
+
+export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.error(\`Error reading localStorage key "\${key}":\`, error);
+      return initialValue;
+    }
+  });
+
+  const setValue = (value: T | ((val: T) => T)) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.error(\`Error setting localStorage key "\${key}":\`, error);
+    }
+  };
+
+  return [storedValue, setValue];
+}`
+  },
+  {
+    path: 'src/lib/security/encryption.ts',
+    language: 'typescript',
+    content: `/**
+ * VEXX AI - Encryption Module
+ * AES-256-GCM encryption with PBKDF2 key derivation
+ */
+
+export interface EncryptionConfig {
+  algorithm: 'AES-GCM';
+  keyLength: 256;
+  iterations: number;
+  saltLength: number;
+  ivLength: number;
+}
+
+export interface PasswordHashResult {
+  hash: string;
+  salt: string;
+  iterations: number;
+}
+
+export interface PasswordStrength {
+  score: number;
+  level: 'weak' | 'fair' | 'good' | 'strong' | 'very-strong';
+  feedback: string[];
+}
+
+const DEFAULT_CONFIG: EncryptionConfig = {
+  algorithm: 'AES-GCM',
+  keyLength: 256,
+  iterations: 100000,
+  saltLength: 16,
+  ivLength: 12,
+};
+
+// Utility functions
+export const generateSecureRandomBytes = (length: number): Uint8Array => {
+  return crypto.getRandomValues(new Uint8Array(length));
+};
+
+export const bytesToHex = (bytes: Uint8Array): string => {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+export const hexToBytes = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+};
+
+export const bytesToBase64 = (bytes: Uint8Array): string => {
+  return btoa(String.fromCharCode(...bytes));
+};
+
+export const base64ToBytes = (base64: string): Uint8Array => {
+  return new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+};
+
+// Core encryption functions
+export async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits', 'deriveKey']
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: DEFAULT_CONFIG.iterations,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+export async function encryptSensitiveString(plaintext: string, password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = generateSecureRandomBytes(DEFAULT_CONFIG.saltLength);
+  const iv = generateSecureRandomBytes(DEFAULT_CONFIG.ivLength);
+  const key = await deriveKey(password, salt);
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoder.encode(plaintext)
+  );
+
+  const result = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
+  result.set(salt, 0);
+  result.set(iv, salt.length);
+  result.set(new Uint8Array(encrypted), salt.length + iv.length);
+
+  return bytesToBase64(result);
+}
+
+export async function decryptSensitiveString(ciphertext: string, password: string): Promise<string> {
+  const decoder = new TextDecoder();
+  const data = base64ToBytes(ciphertext);
+
+  const salt = data.slice(0, DEFAULT_CONFIG.saltLength);
+  const iv = data.slice(DEFAULT_CONFIG.saltLength, DEFAULT_CONFIG.saltLength + DEFAULT_CONFIG.ivLength);
+  const encrypted = data.slice(DEFAULT_CONFIG.saltLength + DEFAULT_CONFIG.ivLength);
+
+  const key = await deriveKey(password, salt);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encrypted
+  );
+
+  return decoder.decode(decrypted);
+}
+
+export async function hashPassword(password: string): Promise<PasswordHashResult> {
+  const salt = generateSecureRandomBytes(DEFAULT_CONFIG.saltLength);
+  const encoder = new TextEncoder();
+  
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+
+  const hashBuffer = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: DEFAULT_CONFIG.iterations,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256
+  );
+
+  return {
+    hash: bytesToHex(new Uint8Array(hashBuffer)),
+    salt: bytesToHex(salt),
+    iterations: DEFAULT_CONFIG.iterations,
+  };
+}
+
+export async function verifyPassword(password: string, hashResult: PasswordHashResult): Promise<boolean> {
+  const salt = hexToBytes(hashResult.salt);
+  const encoder = new TextEncoder();
+
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+
+  const hashBuffer = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: hashResult.iterations,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256
+  );
+
+  const computedHash = bytesToHex(new Uint8Array(hashBuffer));
+  return computedHash === hashResult.hash;
+}
+
+export function validatePasswordStrength(password: string): PasswordStrength {
+  let score = 0;
+  const feedback: string[] = [];
+
+  if (password.length >= 8) score += 1;
+  else feedback.push('Use at least 8 characters');
+
+  if (password.length >= 12) score += 1;
+  if (password.length >= 16) score += 1;
+
+  if (/[a-z]/.test(password)) score += 1;
+  else feedback.push('Add lowercase letters');
+
+  if (/[A-Z]/.test(password)) score += 1;
+  else feedback.push('Add uppercase letters');
+
+  if (/\\d/.test(password)) score += 1;
+  else feedback.push('Add numbers');
+
+  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score += 1;
+  else feedback.push('Add special characters');
+
+  const levels: PasswordStrength['level'][] = ['weak', 'fair', 'good', 'strong', 'very-strong'];
+  const level = levels[Math.min(Math.floor(score / 2), 4)];
+
+  return { score, level, feedback };
+}
+
+export async function computeSHA256Hash(data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+  return bytesToHex(new Uint8Array(hashBuffer));
+}
+
+export function sanitizeInput(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}`
+  },
+  {
+    path: 'src/lib/security/securityAudit.ts',
+    language: 'typescript',
+    content: `/**
+ * VEXX AI - Security Audit Module
+ * Comprehensive security event logging and threat detection
+ */
+
+export type SecuritySeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export type SecurityEventType =
+  | 'authentication_success'
+  | 'authentication_failure'
+  | 'data_access'
+  | 'data_modification'
+  | 'encryption_operation'
+  | 'decryption_operation'
+  | 'suspicious_activity'
+  | 'rate_limit_exceeded'
+  | 'session_created'
+  | 'session_terminated';
+
+export interface SecurityEvent {
+  id: string;
+  type: SecurityEventType;
+  severity: SecuritySeverity;
+  description: string;
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SecurityStatistics {
+  totalEvents: number;
+  eventsByType: Record<SecurityEventType, number>;
+  eventsBySeverity: Record<SecuritySeverity, number>;
+  lastEventTimestamp: number | null;
+}
+
+export interface ThreatAssessment {
+  threatLevel: number;
+  riskFactors: string[];
+  recommendations: string[];
+}
+
+export class SecurityAudit {
+  private static instance: SecurityAudit;
+  private events: SecurityEvent[] = [];
+  private maxEvents = 1000;
+
+  private constructor() {}
+
+  static getInstance(): SecurityAudit {
+    if (!SecurityAudit.instance) {
+      SecurityAudit.instance = new SecurityAudit();
+    }
+    return SecurityAudit.instance;
+  }
+
+  async logEvent(event: Omit<SecurityEvent, 'id' | 'timestamp'>): Promise<void> {
+    const newEvent: SecurityEvent = {
+      ...event,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+    };
+
+    this.events.unshift(newEvent);
+
+    if (this.events.length > this.maxEvents) {
+      this.events = this.events.slice(0, this.maxEvents);
+    }
+  }
+
+  getEvents(options?: { limit?: number; type?: SecurityEventType }): SecurityEvent[] {
+    let filtered = [...this.events];
+
+    if (options?.type) {
+      filtered = filtered.filter(e => e.type === options.type);
+    }
+
+    if (options?.limit) {
+      filtered = filtered.slice(0, options.limit);
+    }
+
+    return filtered;
+  }
+
+  getStatistics(): SecurityStatistics {
+    const eventsByType = {} as Record<SecurityEventType, number>;
+    const eventsBySeverity = {} as Record<SecuritySeverity, number>;
+
+    this.events.forEach(event => {
+      eventsByType[event.type] = (eventsByType[event.type] || 0) + 1;
+      eventsBySeverity[event.severity] = (eventsBySeverity[event.severity] || 0) + 1;
+    });
+
+    return {
+      totalEvents: this.events.length,
+      eventsByType,
+      eventsBySeverity,
+      lastEventTimestamp: this.events[0]?.timestamp || null,
+    };
+  }
+
+  async performThreatAssessment(): Promise<ThreatAssessment> {
+    const stats = this.getStatistics();
+    let threatLevel = 0;
+    const riskFactors: string[] = [];
+    const recommendations: string[] = [];
+
+    const failedAuths = stats.eventsByType['authentication_failure'] || 0;
+    if (failedAuths > 5) {
+      threatLevel += 2;
+      riskFactors.push('Multiple failed authentication attempts');
+      recommendations.push('Enable account lockout after failed attempts');
+    }
+
+    const suspicious = stats.eventsByType['suspicious_activity'] || 0;
+    if (suspicious > 0) {
+      threatLevel += 3;
+      riskFactors.push('Suspicious activity detected');
+      recommendations.push('Review recent activity logs');
+    }
+
+    return { threatLevel: Math.min(threatLevel, 10), riskFactors, recommendations };
+  }
+
+  clearEvents(): void {
+    this.events = [];
+  }
+}
+
+export const securityAudit = SecurityAudit.getInstance();`
+  },
+  {
+    path: 'src/lib/security/secureStorage.ts',
+    language: 'typescript',
+    content: `/**
+ * VEXX AI - Secure Storage Module
+ * Encrypted localStorage with integrity verification
+ */
+
+export interface StorageStatistics {
+  totalEntries: number;
+  expiredEntries: number;
+  totalSize: number;
+  utilizationPercent: number;
+}
+
+export interface StorageOperationResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+export class SecureStorage {
+  private static instance: SecureStorage;
+  private prefix = 'vexx_secure_';
+
+  private constructor() {}
+
+  static getInstance(): SecureStorage {
+    if (!SecureStorage.instance) {
+      SecureStorage.instance = new SecureStorage();
+    }
+    return SecureStorage.instance;
+  }
+
+  async setItem<T>(key: string, value: T): Promise<StorageOperationResult> {
+    try {
+      const serialized = JSON.stringify({
+        data: value,
+        timestamp: Date.now(),
+      });
+      localStorage.setItem(this.prefix + key, serialized);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  async getItem<T>(key: string): Promise<StorageOperationResult<T>> {
+    try {
+      const item = localStorage.getItem(this.prefix + key);
+      if (!item) {
+        return { success: false, error: 'Item not found' };
+      }
+      const parsed = JSON.parse(item);
+      return { success: true, data: parsed.data as T };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  async removeItem(key: string): Promise<StorageOperationResult> {
+    try {
+      localStorage.removeItem(this.prefix + key);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  getStatistics(): StorageStatistics {
+    let totalSize = 0;
+    let totalEntries = 0;
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(this.prefix)) {
+        totalEntries++;
+        totalSize += localStorage.getItem(key)?.length || 0;
+      }
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB typical limit
+    return {
+      totalEntries,
+      expiredEntries: 0,
+      totalSize,
+      utilizationPercent: (totalSize / maxSize) * 100,
+    };
+  }
+
+  clear(): void {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(this.prefix)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+  }
+}
+
+export const secureStorage = SecureStorage.getInstance();
+
+export async function setSecureItem<T>(key: string, value: T) {
+  return secureStorage.setItem(key, value);
+}
+
+export async function getSecureItem<T>(key: string) {
+  return secureStorage.getItem<T>(key);
+}
+
+export async function removeSecureItem(key: string) {
+  return secureStorage.removeItem(key);
+}`
+  },
+  {
+    path: 'vite.config.ts',
+    language: 'typescript',
+    content: `import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
+import { componentTagger } from "lovable-tagger";
+
+export default defineConfig(({ mode }) => ({
+  server: {
+    host: "::",
+    port: 8080,
+  },
+  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+}));`
+  },
+  {
+    path: 'capacitor.config.ts',
+    language: 'typescript',
+    content: `import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'app.lovable.894c50775e804d3fbd7fef7e86765e73',
+  appName: '0.x.vexX AI',
+  webDir: 'dist',
+  server: {
+    url: 'https://894c5077-5e80-4d3f-bd7f-ef7e86765e73.lovableproject.com?forceHideBadge=true',
+    cleartext: true
+  },
+  android: {
+    backgroundColor: '#0a0a0f',
+    allowMixedContent: true
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 2000,
+      backgroundColor: '#0a0a0f',
+      showSpinner: false
+    }
+  }
+};
+
+export default config;`
+  },
+  {
+    path: 'tailwind.config.ts',
+    language: 'typescript',
+    content: `import type { Config } from "tailwindcss";
+
+export default {
+  darkMode: ["class"],
+  content: [
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
+  ],
+  prefix: "",
+  theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: { "2xl": "1400px" },
+    },
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+      },
+      fontFamily: {
+        display: ["Orbitron", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
+      },
+      keyframes: {
+        "fade-in": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "fade-in": "fade-in 0.3s ease-out",
+      },
+    },
+  },
+  plugins: [require("tailwindcss-animate")],
+} satisfies Config;`
+  },
+  {
+    path: 'package.json',
+    language: 'json',
+    content: `{
+  "name": "vexx-ai",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@radix-ui/react-accordion": "^1.2.11",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-tabs": "^1.1.12",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "@tanstack/react-query": "^5.83.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "jspdf": "^3.0.4",
+    "lucide-react": "^0.462.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-helmet-async": "^2.0.5",
+    "react-router-dom": "^6.30.1",
+    "sonner": "^1.7.4",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "@vitejs/plugin-react-swc": "^3.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}`
+  },
+];
+
+/**
  * ═══════════════════════════════════════════════════════════════════════════════
  * DOCUMENTATION DATA
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -788,6 +1562,184 @@ export function DocumentationSection(): JSX.Element {
     }
   }, [exportConfig, itemsByCategory, tableOfContents]);
 
+  /**
+   * Exports complete source code to PDF for developer analysis
+   */
+  const handleExportFullSourceCode = useCallback(async () => {
+    setIsExporting(true);
+    
+    try {
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - (margin * 2);
+      let yPosition = margin;
+
+      // Helper to add page break if needed
+      const checkPageBreak = (requiredHeight: number = 10) => {
+        if (yPosition + requiredHeight > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+
+      // Cover page
+      pdf.setFillColor(15, 23, 42);
+      pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+      
+      pdf.setTextColor(0, 255, 255);
+      pdf.setFontSize(32);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('VexX AI', pageWidth / 2, pageHeight / 4, { align: 'center' });
+      
+      pdf.setFontSize(24);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Complete Source Code', pageWidth / 2, pageHeight / 4 + 15, { align: 'center' });
+      
+      pdf.setFontSize(14);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text('For Developer Analysis & Review', pageWidth / 2, pageHeight / 4 + 30, { align: 'center' });
+      
+      pdf.setFontSize(11);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, pageHeight / 2, { align: 'center' });
+      pdf.text(`Total Files: ${SOURCE_CODE_FILES.length}`, pageWidth / 2, pageHeight / 2 + 8, { align: 'center' });
+      pdf.text('Version 2.0.0', pageWidth / 2, pageHeight / 2 + 16, { align: 'center' });
+      
+      // File list on cover
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 200, 200);
+      pdf.text('Included Files:', pageWidth / 2, pageHeight / 2 + 35, { align: 'center' });
+      
+      pdf.setTextColor(120, 120, 120);
+      pdf.setFontSize(8);
+      SOURCE_CODE_FILES.slice(0, 8).forEach((file, index) => {
+        pdf.text(file.path, pageWidth / 2, pageHeight / 2 + 45 + (index * 5), { align: 'center' });
+      });
+      if (SOURCE_CODE_FILES.length > 8) {
+        pdf.text(`... and ${SOURCE_CODE_FILES.length - 8} more files`, pageWidth / 2, pageHeight / 2 + 45 + (8 * 5), { align: 'center' });
+      }
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text('Cybersecurity AI Platform', pageWidth / 2, pageHeight - 25, { align: 'center' });
+      pdf.text('AES-256-GCM Encryption | PBKDF2 Key Derivation | TypeScript + React', pageWidth / 2, pageHeight - 18, { align: 'center' });
+      
+      pdf.addPage();
+      yPosition = margin;
+
+      // Table of Contents
+      pdf.setTextColor(0, 150, 150);
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Table of Contents', margin, yPosition);
+      yPosition += 12;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.setTextColor(60, 60, 60);
+
+      SOURCE_CODE_FILES.forEach((file, index) => {
+        checkPageBreak(6);
+        pdf.text(`${index + 1}. ${file.path}`, margin, yPosition);
+        pdf.setTextColor(120, 120, 120);
+        pdf.text(`[${file.language}]`, pageWidth - margin - 20, yPosition);
+        pdf.setTextColor(60, 60, 60);
+        yPosition += 6;
+      });
+
+      pdf.addPage();
+      yPosition = margin;
+
+      // Source code files
+      SOURCE_CODE_FILES.forEach((file, fileIndex) => {
+        // File header
+        checkPageBreak(20);
+        
+        pdf.setFillColor(30, 40, 60);
+        pdf.rect(margin, yPosition - 4, contentWidth, 12, 'F');
+        
+        pdf.setTextColor(0, 220, 220);
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`${fileIndex + 1}. ${file.path}`, margin + 3, yPosition + 3);
+        
+        pdf.setTextColor(150, 150, 150);
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Language: ${file.language.toUpperCase()}`, pageWidth - margin - 35, yPosition + 3);
+        
+        yPosition += 15;
+
+        // Code content
+        const codeLines = file.content.split('\\n');
+        
+        pdf.setFontSize(7);
+        pdf.setFont('courier', 'normal');
+        
+        codeLines.forEach((line, lineIndex) => {
+          checkPageBreak(4);
+          
+          // Line number
+          pdf.setTextColor(100, 100, 100);
+          const lineNum = String(lineIndex + 1).padStart(4, ' ');
+          pdf.text(lineNum, margin, yPosition);
+          
+          // Code line
+          pdf.setTextColor(40, 40, 40);
+          const wrappedLines = pdf.splitTextToSize(line || ' ', contentWidth - 15);
+          wrappedLines.forEach((wrappedLine: string, wrapIndex: number) => {
+            if (wrapIndex > 0) {
+              checkPageBreak(4);
+              pdf.text('    ', margin, yPosition);
+            }
+            pdf.text(wrappedLine, margin + 12, yPosition);
+            yPosition += 3.5;
+          });
+        });
+
+        yPosition += 10;
+        
+        // Separator
+        if (fileIndex < SOURCE_CODE_FILES.length - 1) {
+          checkPageBreak(15);
+          pdf.setDrawColor(200, 200, 200);
+          pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+          yPosition += 10;
+        }
+      });
+
+      // Footer with page numbers
+      const totalPages = pdf.internal.pages.length - 1;
+      for (let i = 2; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(`Page ${i - 1} of ${totalPages - 1}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+        pdf.text('VexX AI - Complete Source Code', margin, pageHeight - 8);
+        pdf.text(new Date().toLocaleDateString(), pageWidth - margin - 20, pageHeight - 8);
+      }
+
+      // Save
+      pdf.save(`vexx-ai-full-source-code-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Full source code exported to PDF!');
+    } catch (error) {
+      console.error('Source code export error:', error);
+      toast.error('Failed to export source code');
+    } finally {
+      setIsExporting(false);
+      setShowExportOptions(false);
+    }
+  }, []);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER FUNCTIONS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1104,6 +2056,30 @@ export function DocumentationSection(): JSX.Element {
           </div>
         </div>
 
+        {/* Full Source Code Export */}
+        <div className="mt-4 pt-4 border-t border-primary/20">
+          <div className="flex items-center gap-2 mb-3">
+            <FileCode className="h-4 w-4 text-accent" />
+            <span className="text-sm font-medium text-foreground">Full Source Code Export</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Export all {SOURCE_CODE_FILES.length} source files as a PDF for developer analysis and review.
+          </p>
+          <Button
+            variant="outline"
+            className="w-full border-accent/50 text-accent hover:bg-accent/10"
+            onClick={handleExportFullSourceCode}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Code className="h-4 w-4 mr-2" />
+            )}
+            Export All Source Code (PDF)
+          </Button>
+        </div>
+
         {/* Actions */}
         <div className="flex gap-2 mt-6">
           <Button
@@ -1124,7 +2100,7 @@ export function DocumentationSection(): JSX.Element {
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            Generate PDF
+            Export Docs
           </Button>
         </div>
       </div>
