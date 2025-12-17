@@ -323,7 +323,7 @@ export function SecurityDashboardSection(): JSX.Element {
       const [stats, assessment, events, storage] = await Promise.all([
         securityAudit.getStatistics(),
         securityAudit.performThreatAssessment(),
-        Promise.resolve(securityAudit.getRecentEvents(100)),
+        Promise.resolve(securityAudit.getEvents({ limit: 100 })),
         Promise.resolve(secureStorage.getStatistics()),
       ]);
 
@@ -419,14 +419,27 @@ export function SecurityDashboardSection(): JSX.Element {
   const securityMetrics: SecurityMetric[] = useMemo(() => {
     if (!securityStats || !threatAssessment) return [];
 
+    // Convert numeric threat level to string
+    const getThreatLevelString = (level: number): string => {
+      if (level < 30) return 'LOW';
+      if (level < 60) return 'MEDIUM';
+      return 'HIGH';
+    };
+
+    const threatLevelStr = getThreatLevelString(threatAssessment.threatLevel);
+
+    // Calculate failed authentications from event types
+    const failedAuthCount = securityStats.eventsByType?.['authentication_failure'] || 0;
+    const rateLimitCount = securityStats.eventsByType?.['rate_limit_exceeded'] || 0;
+
     return [
       {
         id: 'threat-level',
         title: 'Threat Level',
-        value: threatAssessment.threatLevel.toUpperCase(),
+        value: threatLevelStr,
         icon: <Shield className="h-5 w-5" />,
-        color: threatAssessment.threatLevel === 'low' ? 'text-accent' : 
-               threatAssessment.threatLevel === 'medium' ? 'text-yellow-500' : 'text-destructive',
+        color: threatAssessment.threatLevel < 30 ? 'text-accent' : 
+               threatAssessment.threatLevel < 60 ? 'text-yellow-500' : 'text-destructive',
         description: 'Current threat assessment level',
       },
       {
@@ -458,19 +471,19 @@ export function SecurityDashboardSection(): JSX.Element {
       {
         id: 'failed-auth',
         title: 'Failed Auth',
-        value: securityStats.failedAuthentications,
-        change: securityStats.failedAuthentications > 0 ? -2 : 0,
-        changeType: securityStats.failedAuthentications > 3 ? 'negative' : 'positive',
+        value: failedAuthCount,
+        change: failedAuthCount > 0 ? -2 : 0,
+        changeType: failedAuthCount > 3 ? 'negative' : 'positive',
         icon: <ShieldAlert className="h-5 w-5" />,
-        color: securityStats.failedAuthentications > 0 ? 'text-destructive' : 'text-accent',
+        color: failedAuthCount > 0 ? 'text-destructive' : 'text-accent',
         description: 'Failed login attempts',
       },
       {
         id: 'rate-limits',
         title: 'Rate Limits',
-        value: securityStats.rateLimitViolations,
+        value: rateLimitCount,
         icon: <Gauge className="h-5 w-5" />,
-        color: securityStats.rateLimitViolations > 0 ? 'text-yellow-500' : 'text-accent',
+        color: rateLimitCount > 0 ? 'text-yellow-500' : 'text-accent',
         description: 'Rate limit violations',
       },
     ];
@@ -600,6 +613,14 @@ export function SecurityDashboardSection(): JSX.Element {
     const scoreColor = threatScore >= 80 ? 'text-accent' : 
                        threatScore >= 60 ? 'text-yellow-500' : 'text-destructive';
 
+    const getThreatLevelString = (level: number): string => {
+      if (level < 30) return 'LOW';
+      if (level < 60) return 'MEDIUM';
+      return 'HIGH';
+    };
+
+    const threatLevelStr = getThreatLevelString(threatAssessment.threatLevel);
+
     return (
       <div className="cyber-card rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
@@ -608,11 +629,11 @@ export function SecurityDashboardSection(): JSX.Element {
             Threat Assessment
           </h3>
           <Badge variant="outline" className={cn(
-            threatAssessment.threatLevel === 'low' ? 'border-accent text-accent' :
-            threatAssessment.threatLevel === 'medium' ? 'border-yellow-500 text-yellow-500' :
+            threatAssessment.threatLevel < 30 ? 'border-accent text-accent' :
+            threatAssessment.threatLevel < 60 ? 'border-yellow-500 text-yellow-500' :
             'border-destructive text-destructive'
           )}>
-            {threatAssessment.threatLevel.toUpperCase()}
+            {threatLevelStr}
           </Badge>
         </div>
 
@@ -713,11 +734,11 @@ export function SecurityDashboardSection(): JSX.Element {
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 rounded-lg bg-muted/30 border border-primary/20">
             <p className="text-xs text-muted-foreground">Total Items</p>
-            <p className="text-xl font-display font-bold text-foreground">{storageStats.totalItems}</p>
+            <p className="text-xl font-display font-bold text-foreground">{storageStats.totalEntries}</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/30 border border-primary/20">
-            <p className="text-xs text-muted-foreground">Encrypted</p>
-            <p className="text-xl font-display font-bold text-accent">{storageStats.encryptedItems}</p>
+            <p className="text-xs text-muted-foreground">Expired</p>
+            <p className="text-xl font-display font-bold text-accent">{storageStats.expiredEntries}</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/30 border border-primary/20">
             <p className="text-xs text-muted-foreground">Storage Used</p>
@@ -726,9 +747,9 @@ export function SecurityDashboardSection(): JSX.Element {
             </p>
           </div>
           <div className="p-3 rounded-lg bg-muted/30 border border-primary/20">
-            <p className="text-xs text-muted-foreground">Last Access</p>
+            <p className="text-xs text-muted-foreground">Utilization</p>
             <p className="text-sm font-medium text-foreground">
-              {storageStats.lastAccess ? formatRelativeTime(storageStats.lastAccess) : 'Never'}
+              {storageStats.utilizationPercent.toFixed(1)}%
             </p>
           </div>
         </div>
@@ -824,7 +845,7 @@ export function SecurityDashboardSection(): JSX.Element {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {formatRelativeTime(event.timestamp)}
+                        {formatRelativeTime(new Date(event.timestamp))}
                       </span>
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
@@ -854,7 +875,7 @@ export function SecurityDashboardSection(): JSX.Element {
                       </div>
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">Timestamp:</span>
-                        <span className="text-foreground">{formatDate(event.timestamp)}</span>
+                        <span className="text-foreground">{formatDate(new Date(event.timestamp))}</span>
                       </div>
                       {event.metadata && Object.keys(event.metadata).length > 0 && (
                         <div className="text-xs">
