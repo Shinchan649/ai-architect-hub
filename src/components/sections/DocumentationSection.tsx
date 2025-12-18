@@ -2380,6 +2380,80 @@ export function DocumentationSection(): JSX.Element {
     }
   }, []);
 
+  /**
+   * Exports complete source code to a text file
+   */
+  const handleExportSourceCodeText = useCallback(() => {
+    setIsExporting(true);
+    
+    try {
+      let content = '';
+      
+      // Header
+      content += '═'.repeat(80) + '\n';
+      content += 'VEXX AI - COMPLETE SOURCE CODE\n';
+      content += '═'.repeat(80) + '\n\n';
+      content += `Generated: ${new Date().toLocaleString()}\n`;
+      content += `Total Files: ${SOURCE_CODE_FILES.length}\n`;
+      content += `Version: 2.0.0\n\n`;
+      
+      // Table of Contents
+      content += '─'.repeat(80) + '\n';
+      content += 'TABLE OF CONTENTS\n';
+      content += '─'.repeat(80) + '\n\n';
+      
+      SOURCE_CODE_FILES.forEach((file, index) => {
+        content += `${String(index + 1).padStart(2, '0')}. ${file.path} [${file.language}]\n`;
+      });
+      
+      content += '\n' + '═'.repeat(80) + '\n';
+      content += 'SOURCE FILES\n';
+      content += '═'.repeat(80) + '\n\n';
+      
+      // Source files
+      SOURCE_CODE_FILES.forEach((file, index) => {
+        content += '┌' + '─'.repeat(78) + '┐\n';
+        content += `│ ${String(index + 1).padStart(2, '0')}. ${file.path}`.padEnd(79) + '│\n';
+        content += `│ Language: ${file.language.toUpperCase()}`.padEnd(79) + '│\n';
+        content += '└' + '─'.repeat(78) + '┘\n\n';
+        
+        // Add line numbers to code
+        const lines = file.content.split('\n');
+        lines.forEach((line, lineIndex) => {
+          const lineNum = String(lineIndex + 1).padStart(4, ' ');
+          content += `${lineNum} │ ${line}\n`;
+        });
+        
+        content += '\n' + '─'.repeat(80) + '\n\n';
+      });
+      
+      // Footer
+      content += '═'.repeat(80) + '\n';
+      content += 'END OF SOURCE CODE\n';
+      content += `VexX AI - Cybersecurity AI Platform\n`;
+      content += '═'.repeat(80) + '\n';
+      
+      // Create and download file
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `vexx-ai-source-code-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Source code exported to text file!');
+    } catch (error) {
+      console.error('Text export error:', error);
+      toast.error('Failed to export source code');
+    } finally {
+      setIsExporting(false);
+      setShowExportOptions(false);
+    }
+  }, []);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER FUNCTIONS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2705,19 +2779,34 @@ export function DocumentationSection(): JSX.Element {
           <p className="text-xs text-muted-foreground mb-3">
             Export all {SOURCE_CODE_FILES.length} source files as a PDF for developer analysis and review.
           </p>
-          <Button
-            variant="outline"
-            className="w-full border-accent/50 text-accent hover:bg-accent/10"
-            onClick={handleExportFullSourceCode}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Code className="h-4 w-4 mr-2" />
-            )}
-            Export All Source Code (PDF)
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 border-accent/50 text-accent hover:bg-accent/10"
+              onClick={handleExportFullSourceCode}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Code className="h-4 w-4 mr-2" />
+              )}
+              PDF
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
+              onClick={handleExportSourceCodeText}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <FileText className="h-4 w-4 mr-2" />
+              )}
+              TXT
+            </Button>
+          </div>
         </div>
 
         {/* Actions */}
