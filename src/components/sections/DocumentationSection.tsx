@@ -922,6 +922,646 @@ export default {
   }
 }`
   },
+  // Pages
+  {
+    path: 'src/pages/Index.tsx',
+    language: 'tsx',
+    content: `import { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { MainSidebar } from '@/components/layout/MainSidebar';
+import { HomeSection } from '@/components/sections/HomeSection';
+import { ConsoleSection } from '@/components/sections/ConsoleSection';
+import { APISection } from '@/components/sections/APISection';
+import { ModificationSection } from '@/components/sections/ModificationSection';
+import { LicenseSection } from '@/components/sections/LicenseSection';
+import { SettingsSection } from '@/components/sections/SettingsSection';
+import { LogsSection } from '@/components/sections/LogsSection';
+import { AboutSection } from '@/components/sections/AboutSection';
+import { useAppState } from '@/hooks/useAppState';
+
+const Index = () => {
+  const {
+    settings, license, uploadedFiles, sessions, logs, currentSession,
+    activeSection, isAuthenticated, isLoading, setSettings, setLicense,
+    setActiveSection, createSession, addFile, removeFile, addLog, clearLogs,
+    authenticate, logout, sendMessage,
+  } = useAppState();
+
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+
+  const handleToggleInternet = () => {
+    setSettings(prev => {
+      const newState = { ...prev, internetEnabled: !prev.internetEnabled };
+      addLog(\`Internet access \${newState.internetEnabled ? 'enabled' : 'disabled'}\`);
+      return newState;
+    });
+  };
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'home': return <HomeSection appName={settings.appName} internetEnabled={settings.internetEnabled} onToggleInternet={handleToggleInternet} onNavigate={setActiveSection} uploadedFilesCount={uploadedFiles.length} />;
+      case 'console': return <ConsoleSection session={currentSession} isLoading={isLoading} onSendMessage={sendMessage} internetEnabled={settings.internetEnabled} onToggleInternet={handleToggleInternet} uploadedFiles={uploadedFiles} onOpenFileManager={() => setActiveSection('settings')} />;
+      case 'api': return <APISection settings={settings} onUpdateSettings={setSettings} />;
+      case 'modification': return <ModificationSection isAuthenticated={isAuthenticated} onAuthenticate={authenticate} onLogout={logout} settings={settings} license={license} onUpdateSettings={setSettings} onUpdateLicense={setLicense} />;
+      case 'license': return <LicenseSection license={license} />;
+      case 'settings': return <SettingsSection settings={settings} uploadedFiles={uploadedFiles} onAddFile={addFile} onRemoveFile={removeFile} onUpdateSettings={setSettings} />;
+      case 'logs': return <LogsSection logs={logs} onClearLogs={clearLogs} />;
+      case 'about': return <AboutSection appName={settings.appName} />;
+      default: return null;
+    }
+  };
+
+  return (
+    <>
+      <Helmet>
+        <title>{settings.appName} - Cybersecurity AI Platform</title>
+        <meta name="description" content="AI-driven cybersecurity testing and simulation platform for controlled lab environments." />
+      </Helmet>
+      <div className="flex h-screen bg-background overflow-hidden">
+        <MainSidebar activeSection={activeSection} onSectionChange={setActiveSection} appName={settings.appName} isAuthenticated={isAuthenticated} />
+        <main className="flex-1 flex flex-col overflow-hidden">{renderSection()}</main>
+      </div>
+    </>
+  );
+};
+
+export default Index;`
+  },
+  {
+    path: 'src/pages/NotFound.tsx',
+    language: 'tsx',
+    content: `import { useLocation } from "react-router-dom";
+import { useEffect } from "react";
+
+const NotFound = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
+  }, [location.pathname]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted">
+      <div className="text-center">
+        <h1 className="mb-4 text-4xl font-bold">404</h1>
+        <p className="mb-4 text-xl text-muted-foreground">Oops! Page not found</p>
+        <a href="/" className="text-primary underline hover:text-primary/90">Return to Home</a>
+      </div>
+    </div>
+  );
+};
+
+export default NotFound;`
+  },
+  // Hooks
+  {
+    path: 'src/hooks/useAppState.ts',
+    language: 'typescript',
+    content: `import { useState, useCallback } from 'react';
+import { useLocalStorage } from './useLocalStorage';
+import { AppSettings, LicenseInfo, UploadedFile, ChatSession, Message, MenuSection } from '@/types/app';
+
+const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const defaultSettings: AppSettings = {
+  appName: '0.x" vexX AI',
+  internetEnabled: false,
+  modificationPassword: '',
+  recoveryEmail: '',
+  internalAPIKey: '',
+  externalAPIs: [],
+  activeAPIId: null,
+};
+
+const defaultLicense: LicenseInfo = {
+  text: '',
+  version: '1.0.0',
+  lastUpdated: new Date(),
+};
+
+export function useAppState() {
+  const [settings, setSettings] = useLocalStorage<AppSettings>('vexai-settings', defaultSettings);
+  const [license, setLicense] = useLocalStorage<LicenseInfo>('vexai-license', defaultLicense);
+  const [uploadedFiles, setUploadedFiles] = useLocalStorage<UploadedFile[]>('vexai-files', []);
+  const [sessions, setSessions] = useLocalStorage<ChatSession[]>('vexai-sessions', []);
+  const [logs, setLogs] = useLocalStorage<string[]>('vexai-logs', []);
+  const [currentSessionId, setCurrentSessionId] = useLocalStorage<string | null>('vexai-current-session', null);
+  const [activeSection, setActiveSection] = useState<MenuSection>('home');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const currentSession = sessions.find(s => s.id === currentSessionId) || null;
+
+  const createSession = useCallback(() => {
+    const newSession: ChatSession = { id: generateId(), title: 'New Session', messages: [], createdAt: new Date(), updatedAt: new Date() };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+    return newSession;
+  }, [setSessions, setCurrentSessionId]);
+
+  const updateSession = useCallback((sessionId: string, updates: Partial<ChatSession>) => {
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...updates, updatedAt: new Date() } : s));
+  }, [setSessions]);
+
+  const deleteSession = useCallback((sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    if (currentSessionId === sessionId) setCurrentSessionId(null);
+  }, [setSessions, currentSessionId, setCurrentSessionId]);
+
+  const addFile = useCallback((file: Omit<UploadedFile, 'id' | 'uploadedAt'>) => {
+    const newFile: UploadedFile = { ...file, id: generateId(), uploadedAt: new Date() };
+    setUploadedFiles(prev => [...prev, newFile]);
+    return newFile;
+  }, [setUploadedFiles]);
+
+  const removeFile = useCallback((fileId: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+  }, [setUploadedFiles]);
+
+  const addLog = useCallback((message: string) => {
+    const timestamp = new Date().toISOString();
+    setLogs(prev => [\`[\${timestamp}] \${message}\`, ...prev].slice(0, 1000));
+  }, [setLogs]);
+
+  const clearLogs = useCallback(() => { setLogs([]); }, [setLogs]);
+
+  const authenticate = useCallback((password: string): boolean => {
+    if (!settings.modificationPassword) {
+      setSettings(prev => ({ ...prev, modificationPassword: password }));
+      setIsAuthenticated(true);
+      addLog('Modification password set for the first time');
+      return true;
+    }
+    if (password === settings.modificationPassword) {
+      setIsAuthenticated(true);
+      addLog('Successfully authenticated to Modification section');
+      return true;
+    }
+    addLog('Failed authentication attempt');
+    return false;
+  }, [settings.modificationPassword, setSettings, addLog]);
+
+  const logout = useCallback(() => {
+    setIsAuthenticated(false);
+    addLog('Logged out from Modification section');
+  }, [addLog]);
+
+  const sendMessage = useCallback(async (content: string) => {
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      const newSession = createSession();
+      sessionId = newSession.id;
+    }
+    const userMessage: Message = { id: generateId(), role: 'user', content, timestamp: new Date() };
+    const session = sessions.find(s => s.id === sessionId);
+    updateSession(sessionId, { messages: [...(session?.messages || []), userMessage], title: session?.messages.length === 0 ? content.slice(0, 30) + '...' : session?.title });
+    addLog(\`User prompt: \${content.slice(0, 50)}...\`);
+    setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const responses = [
+      { type: 'reasoning' as const, content: \`Analyzing request: "\${content}"\\n\\nDetermining required tools...\` },
+      { type: 'execution' as const, content: \`⚠️ CONFIRMATION REQUIRED\\n\\nThis operation requires:\\n• Tool: nmap, nikto\\n• Files: target_list.txt\\n\\nDo you confirm execution?\` },
+    ];
+    const aiMessages: Message[] = responses.map(r => ({ id: generateId(), role: 'assistant' as const, content: r.content, timestamp: new Date(), type: r.type }));
+    const updatedSession = sessions.find(s => s.id === sessionId);
+    updateSession(sessionId, { messages: [...(updatedSession?.messages || []), userMessage, ...aiMessages] });
+    addLog('AI response generated');
+    setIsLoading(false);
+  }, [currentSessionId, sessions, createSession, updateSession, addLog]);
+
+  return {
+    settings, license, uploadedFiles, sessions, logs, currentSession, currentSessionId, activeSection, isAuthenticated, isLoading,
+    setSettings, setLicense, setActiveSection, setCurrentSessionId, createSession, updateSession, deleteSession, addFile, removeFile, addLog, clearLogs, authenticate, logout, sendMessage,
+  };
+}`
+  },
+  {
+    path: 'src/hooks/useChat.ts',
+    language: 'typescript',
+    content: `import { useState, useCallback } from 'react';
+import { Message, ChatSession } from '@/types/chat';
+import { useLocalStorage } from './useLocalStorage';
+
+const generateId = () => Math.random().toString(36).substring(2, 15);
+
+export function useChat() {
+  const [sessions, setSessions] = useLocalStorage<ChatSession[]>('0xai-sessions', []);
+  const [currentSessionId, setCurrentSessionId] = useLocalStorage<string | null>('0xai-current-session', null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const currentSession = sessions.find(s => s.id === currentSessionId) || null;
+
+  const createSession = useCallback(() => {
+    const newSession: ChatSession = { id: generateId(), title: 'New Chat', messages: [], createdAt: new Date(), updatedAt: new Date() };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+    return newSession;
+  }, [setSessions, setCurrentSessionId]);
+
+  const updateSession = useCallback((sessionId: string, updates: Partial<ChatSession>) => {
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...updates, updatedAt: new Date() } : s));
+  }, [setSessions]);
+
+  const deleteSession = useCallback((sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    if (currentSessionId === sessionId) setCurrentSessionId(null);
+  }, [setSessions, currentSessionId, setCurrentSessionId]);
+
+  const clearAllSessions = useCallback(() => {
+    setSessions([]);
+    setCurrentSessionId(null);
+  }, [setSessions, setCurrentSessionId]);
+
+  const sendMessage = useCallback(async (content: string, apiKey?: string) => {
+    if (!currentSession) {
+      const newSession = createSession();
+      setCurrentSessionId(newSession.id);
+    }
+    const userMessage: Message = { id: generateId(), role: 'user', content, timestamp: new Date() };
+    const sessionId = currentSessionId || sessions[0]?.id;
+    if (!sessionId) return;
+    updateSession(sessionId, { messages: [...(currentSession?.messages || []), userMessage], title: currentSession?.messages.length === 0 ? content.slice(0, 30) + '...' : currentSession?.title });
+    setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+    const aiResponses = [
+      "I'm 0x.AI, your cybernetic assistant. Running in demo mode.",
+      "Initializing response protocols... In demo mode.",
+      "System online. Demonstrating the chat interface.",
+    ];
+    const assistantMessage: Message = { id: generateId(), role: 'assistant', content: apiKey ? \`[API Connected] Processing: "\${content}"\` : aiResponses[Math.floor(Math.random() * aiResponses.length)], timestamp: new Date() };
+    const updatedSession = sessions.find(s => s.id === sessionId);
+    updateSession(sessionId, { messages: [...(updatedSession?.messages || []), userMessage, assistantMessage] });
+    setIsLoading(false);
+  }, [currentSession, currentSessionId, sessions, createSession, updateSession, setCurrentSessionId]);
+
+  return { sessions, currentSession, currentSessionId, isLoading, createSession, setCurrentSessionId, updateSession, deleteSession, clearAllSessions, sendMessage };
+}`
+  },
+  {
+    path: 'src/hooks/use-mobile.tsx',
+    language: 'tsx',
+    content: `import * as React from "react";
+
+const MOBILE_BREAKPOINT = 768;
+
+export function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined);
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(\`(max-width: \${MOBILE_BREAKPOINT - 1}px)\`);
+    const onChange = () => { setIsMobile(window.innerWidth < MOBILE_BREAKPOINT); };
+    mql.addEventListener("change", onChange);
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return !!isMobile;
+}`
+  },
+  // Chat Components
+  {
+    path: 'src/components/chat/ChatArea.tsx',
+    language: 'tsx',
+    content: `import { useRef, useEffect } from 'react';
+import { MessageBubble } from './MessageBubble';
+import { ChatInput } from './ChatInput';
+import { ChatSession } from '@/types/chat';
+import { Bot, Sparkles } from 'lucide-react';
+
+interface ChatAreaProps {
+  session: ChatSession | null;
+  isLoading: boolean;
+  onSendMessage: (message: string) => void;
+}
+
+export function ChatArea({ session, isLoading, onSendMessage }: ChatAreaProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [session?.messages]);
+
+  return (
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 matrix-bg scanline">
+        {session?.messages && session.messages.length > 0 ? (
+          <>
+            {session.messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))}
+            {isLoading && (
+              <div className="flex gap-3 animate-fade-in">
+                <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/50 flex items-center justify-center animate-pulse-glow">
+                  <Bot className="h-4 w-4 text-primary" />
+                </div>
+                <div className="cyber-card rounded-lg p-4 max-w-[80%]">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Sparkles className="h-4 w-4 animate-pulse" />
+                    <span className="text-sm typing-cursor">Processing</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center animate-fade-in">
+            <div className="w-24 h-24 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-6 animate-float">
+              <span className="text-4xl font-display font-bold text-primary glow-text">0x</span>
+            </div>
+            <h2 className="text-2xl font-display font-bold text-foreground mb-2">Welcome to <span className="text-primary glow-text">0x.AI</span></h2>
+            <p className="text-muted-foreground max-w-md mb-8">Your cybernetic AI assistant.</p>
+          </div>
+        )}
+      </div>
+      <ChatInput onSend={onSendMessage} isLoading={isLoading} />
+    </div>
+  );
+}`
+  },
+  {
+    path: 'src/components/chat/ChatInput.tsx',
+    language: 'tsx',
+    content: `import { useState, KeyboardEvent } from 'react';
+import { Send, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+interface ChatInputProps {
+  onSend: (message: string) => void;
+  isLoading: boolean;
+  disabled?: boolean;
+}
+
+export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
+  const [message, setMessage] = useState('');
+
+  const handleSend = () => {
+    if (message.trim() && !isLoading) {
+      onSend(message.trim());
+      setMessage('');
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return (
+    <div className="p-4 border-t border-primary/20 bg-card/50 backdrop-blur-sm">
+      <div className="max-w-4xl mx-auto">
+        <div className="relative flex items-end gap-2 cyber-border rounded-lg p-2 bg-muted/30">
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Enter your message..."
+            disabled={disabled || isLoading}
+            rows={1}
+            className={cn("flex-1 bg-transparent border-none resize-none text-foreground placeholder:text-muted-foreground focus:outline-none font-mono text-sm py-2 px-3 min-h-[40px] max-h-[200px]")}
+          />
+          <Button variant="cyber" size="icon" onClick={handleSend} disabled={!message.trim() || isLoading || disabled} className="shrink-0">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground text-center mt-2">Press Enter to send, Shift+Enter for new line</p>
+      </div>
+    </div>
+  );
+}`
+  },
+  {
+    path: 'src/components/chat/MessageBubble.tsx',
+    language: 'tsx',
+    content: `import { Message } from '@/types/chat';
+import { cn } from '@/lib/utils';
+import { User, Bot } from 'lucide-react';
+
+interface MessageBubbleProps { message: Message; }
+
+export function MessageBubble({ message }: MessageBubbleProps) {
+  const isUser = message.role === 'user';
+
+  return (
+    <div className={cn("flex gap-3 animate-slide-up", isUser ? "flex-row-reverse" : "flex-row")}>
+      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border", isUser ? "bg-accent/20 border-accent/50" : "bg-primary/20 border-primary/50 animate-pulse-glow")}>
+        {isUser ? <User className="h-4 w-4 text-accent" /> : <Bot className="h-4 w-4 text-primary" />}
+      </div>
+      <div className={cn("max-w-[80%] rounded-lg p-4 border", isUser ? "bg-accent/10 border-accent/30 text-foreground" : "cyber-card")}>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+        <span className="text-xs text-muted-foreground mt-2 block">{new Date(message.timestamp).toLocaleTimeString()}</span>
+      </div>
+    </div>
+  );
+}`
+  },
+  // Layout Components
+  {
+    path: 'src/components/layout/MainSidebar.tsx',
+    language: 'tsx',
+    content: `import { Home, Terminal, Key, Shield, FileText, Settings, ScrollText, Info, Lock, Menu, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MenuSection } from '@/types/app';
+import { cn } from '@/lib/utils';
+import { useState } from 'react';
+
+interface MainSidebarProps {
+  activeSection: MenuSection;
+  onSectionChange: (section: MenuSection) => void;
+  appName: string;
+  isAuthenticated: boolean;
+}
+
+const menuItems: { id: MenuSection; label: string; icon: React.ReactNode; locked?: boolean }[] = [
+  { id: 'home', label: 'Home', icon: <Home className="h-4 w-4" /> },
+  { id: 'console', label: 'Interaction Console', icon: <Terminal className="h-4 w-4" /> },
+  { id: 'api', label: 'API', icon: <Key className="h-4 w-4" /> },
+  { id: 'modification', label: 'Modification', icon: <Shield className="h-4 w-4" />, locked: true },
+  { id: 'license', label: 'License', icon: <FileText className="h-4 w-4" /> },
+  { id: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
+  { id: 'logs', label: 'Logs', icon: <ScrollText className="h-4 w-4" /> },
+  { id: 'about', label: 'About', icon: <Info className="h-4 w-4" /> },
+];
+
+export function MainSidebar({ activeSection, onSectionChange, appName, isAuthenticated }: MainSidebarProps) {
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b border-primary/20">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary/30 to-accent/20 border border-primary/50 flex items-center justify-center animate-pulse-glow">
+            <span className="text-primary font-display font-bold text-sm">0.x"</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-display text-base font-bold text-foreground glow-text truncate">{appName}</h1>
+            <p className="text-xs text-muted-foreground">Cybersecurity AI Platform</p>
+          </div>
+        </div>
+      </div>
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {menuItems.map((item) => (
+          <button key={item.id} onClick={() => { onSectionChange(item.id); setIsMobileOpen(false); }}
+            className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              activeSection === item.id ? "bg-primary/20 text-primary border border-primary/50 glow-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}>
+            <span className={cn("transition-colors", activeSection === item.id ? "text-primary" : "")}>{item.icon}</span>
+            <span className="flex-1 text-left">{item.label}</span>
+            {item.locked && <Lock className={cn("h-3 w-3", isAuthenticated && item.id === 'modification' ? "text-accent" : "text-muted-foreground")} />}
+          </button>
+        ))}
+      </nav>
+      <div className="p-4 border-t border-primary/20">
+        <p className="text-xs text-center text-muted-foreground">Created by <span className="text-primary font-medium">0.x" vexX</span></p>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <Button variant="outline" size="icon" className="fixed top-4 left-4 z-50 md:hidden" onClick={() => setIsMobileOpen(!isMobileOpen)}>
+        {isMobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+      </Button>
+      {isMobileOpen && <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden" onClick={() => setIsMobileOpen(false)} />}
+      <aside className={cn("fixed md:relative z-40 h-full w-64 bg-card border-r border-primary/20 transition-transform duration-300", isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0")}>
+        <SidebarContent />
+      </aside>
+    </>
+  );
+}`
+  },
+  // Section Components
+  {
+    path: 'src/components/sections/HomeSection.tsx',
+    language: 'tsx',
+    content: `import { Terminal, Shield, Wifi, WifiOff, Upload, Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MenuSection } from '@/types/app';
+
+interface HomeSectionProps {
+  appName: string;
+  internetEnabled: boolean;
+  onToggleInternet: () => void;
+  onNavigate: (section: MenuSection) => void;
+  uploadedFilesCount: number;
+}
+
+export function HomeSection({ appName, internetEnabled, onToggleInternet, onNavigate, uploadedFilesCount }: HomeSectionProps) {
+  return (
+    <div className="h-full flex flex-col p-6 overflow-y-auto matrix-bg">
+      <div className="flex-1 flex flex-col items-center justify-center text-center max-w-2xl mx-auto">
+        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/10 border border-primary/30 flex items-center justify-center mb-6 animate-float">
+          <Shield className="h-12 w-12 text-primary" />
+        </div>
+        <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-3">
+          Welcome to <span className="text-primary glow-text">{appName}</span>
+        </h1>
+        <p className="text-muted-foreground mb-8 max-w-lg">AI-driven cybersecurity testing & simulation platform for controlled lab environments.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-xl mb-8">
+          <Button variant="cyber" size="lg" className="flex-col h-auto py-6 gap-2" onClick={() => onNavigate('console')}>
+            <Terminal className="h-6 w-6" /><span>Open Console</span>
+          </Button>
+          <Button variant={internetEnabled ? "accent" : "outline"} size="lg" className="flex-col h-auto py-6 gap-2" onClick={onToggleInternet}>
+            {internetEnabled ? <><Wifi className="h-6 w-6" /><span>Internet ON</span></> : <><WifiOff className="h-6 w-6" /><span>Internet OFF</span></>}
+          </Button>
+          <Button variant="outline" size="lg" className="flex-col h-auto py-6 gap-2 relative" onClick={() => onNavigate('settings')}>
+            <Upload className="h-6 w-6" /><span>Add Files</span>
+            {uploadedFilesCount > 0 && <span className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">{uploadedFilesCount}</span>}
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
+          <div className="cyber-card rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className={\`w-2 h-2 rounded-full \${internetEnabled ? 'bg-accent animate-pulse' : 'bg-muted-foreground'}\`} />
+              <span className="text-sm text-muted-foreground">Network Status</span>
+            </div>
+            <p className="text-lg font-medium text-foreground">{internetEnabled ? 'Online Mode' : 'Offline Mode'}</p>
+          </div>
+          <div className="cyber-card rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="h-3 w-3 text-primary" />
+              <span className="text-sm text-muted-foreground">Files Loaded</span>
+            </div>
+            <p className="text-lg font-medium text-foreground">{uploadedFilesCount} files</p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-8 p-4 rounded-lg border border-primary/20 bg-primary/5 max-w-2xl mx-auto">
+        <p className="text-xs text-center text-muted-foreground">
+          <span className="text-primary font-medium">Lab Environment Only</span> — All operations require explicit confirmation.
+        </p>
+      </div>
+    </div>
+  );
+}`
+  },
+  // Types
+  {
+    path: 'src/types/app.ts',
+    language: 'typescript',
+    content: `export interface Message {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  type?: 'reasoning' | 'execution' | 'output' | 'log' | 'result';
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ExternalAPI {
+  id: string;
+  name: string;
+  key: string;
+  provider: 'openai' | 'anthropic' | 'google' | 'custom';
+  endpoint?: string;
+  isActive: boolean;
+}
+
+export interface AppSettings {
+  appName: string;
+  internetEnabled: boolean;
+  modificationPassword: string;
+  recoveryEmail: string;
+  internalAPIKey: string;
+  externalAPIs: ExternalAPI[];
+  activeAPIId: string | null;
+}
+
+export interface LicenseInfo {
+  text: string;
+  version: string;
+  lastUpdated: Date;
+}
+
+export interface UploadedFile {
+  id: string;
+  name: string;
+  type: 'script' | 'wordlist' | 'config' | 'tool' | 'other';
+  content: string;
+  uploadedAt: Date;
+}
+
+export interface ExecutionTask {
+  id: string;
+  prompt: string;
+  requiredTools: string[];
+  requiredFiles: string[];
+  status: 'pending' | 'confirmed' | 'executing' | 'completed' | 'failed';
+  output: string[];
+  createdAt: Date;
+}
+
+export type MenuSection = 'home' | 'console' | 'api' | 'modification' | 'license' | 'settings' | 'logs' | 'about';`
+  },
 ];
 
 /**
