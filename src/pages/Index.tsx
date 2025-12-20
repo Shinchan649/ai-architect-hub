@@ -10,6 +10,7 @@ import { SettingsSection } from '@/components/sections/SettingsSection';
 import { LogsSection } from '@/components/sections/LogsSection';
 import { AboutSection } from '@/components/sections/AboutSection';
 import { useAppState } from '@/hooks/useAppState';
+import { InstallBanner } from '@/components/InstallBanner';
 
 const Index = () => {
   const {
@@ -125,6 +126,7 @@ const Index = () => {
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
+          <InstallBanner />
           {renderSection()}
         </main>
       </div>
